@@ -171,25 +171,107 @@ o(logn) would answer about one hundered thousands req
 for finding location of person after ten times of splitting with have only one car in one meter -->  at redis we have geospatial https://redis.io/commands/?group=geo
 at google lat and longitude comes vice of versa in contrast with elastic and redis
 ```bash
+GEOADD loc:places 35.70205155011496 51.37873076419946 valiasr --> LONG LATITUDE
+GEOSEARCH  --> there is a lot of feature like box, sort, count, coordination --> o(n+log(m))
+GEORADIUS  --> GEORADIUS loc:places 35.70205155011467 51.37873076419935 10 km ASC COUNT 10
+GEOSEARCH loc:places FROMLONLAT 35.70205155011467 51.37873076419935 BYRADIUS 10 km ASC count 10 --> at website worked //needed new redis version
+ZRANGE 
+ZCARD
+ZINTER --> first we make group smaller then use this one
+GEOSEARCHSTORE loc:search:1 loc:places fromlonlat 12.758489 38.788135 byradius 3 km storedist -->DISTANCE CALCULATE FROM PERSON
+zrange loc:places:1 0 1
+zadd tag:meat 5 valiasr 7 sohrevardi
+ZINTERSTORE search:1 2 tag:meat loc:search:1 WEIGHTS 1 0 -->SO WEIGHT OF LOCATION SEARCH IS ZERO
+ZREVRANGE search:1 0 -1 WITHSCORES
 ```
+## stream at redis is like kafka, rabbitmq
+wht we need it? imagine we have a lot of services and queue and we wanna be sure after after one minute get answer or for performance every 1000 request should be saved bulkly in database
+producer --> new post that should be save at database
+consumer --> service that read data from it
+consumer group --> like fan out
+ack and DLQ --> for prevent data loss with error handling and when a req fail again do sth
+for stream we need ID --> AUTO GENERATE  first part is timestamp and sequence number
+```bash
+XADD stream:1 * name ali age 12 --> \\star is wildcard for autogenerating id ,this will happen with producer
+XADD stream:1 * name mehrdad age 28
+xrange stream:1 - + count 3 --> \\The - and + special IDs mean respectively the minimum ID possible and the maximum ID possible inside a stream this will happened with consumers
+xrange stream:1  1711700638030-0 + count 2
+xrange stream:1 (1711700638030-0 + count 2 --? we tell that don't consider the id after paranthesis like mathematics
+```
+how lock consumers from using same data and write nonunique data in database --> consumer groups and spread data and can consider which ones are not ack
+```bash
+XGROUP CREATE stream:1 group:saveDB $ -->$" symbol is used here as a placeholder to indicate that the consumer group should read from the latest message in the stream.
+XREADGROUP -->make new consumer group
+@another redis-cli xadd stream:1 * name amir age 18
+XREADGROUP GROUP  group:saveDB consumer:1  COUNT 5 STREAMS stream:1 > -->the wild card means gives us new item that has been added recently
+XACK stream:1 group:saveDB 1711705471222-0
+XREADGROUP  GROUP group:saveDB consumer:1  COUNT 5 STREAMS stream:1 0 --> shows pending ones; those that are not acknowleged yet
+```
+how to use cache and pending list; after pending goes to that queue pending list and other group does not know that 
+```bash
+XAUTOCLAIM --> 
+eg: XAUTOCLAIM mystream mygroup Alice 3600000 0-0 COUNT 25 -->5 entries that are pending and idle (not having been acknowledged or claimed) for at least an hour, starting at the stream's beginning. The consumer "Alice" from the "mygroup" group acquires ownership of these messages.
+xdel --> removes it from queue
+```
+using redis for fast develop is better choice at first, in contrast with kafka and rabbitmq
+
+## redis instead of elasticsearch
+near restaurant and stars of them and food
+Redis Stack offers an enhanced Redis experience via the following search and query features:
+
+A rich query language
+Incremental indexing on JSON and hash documents
+Vector search
+Full-text search
+Geospatial queries
+Aggregations
 
 ```bash
+HGETALL 
+FT.CREATE -->   FT.CREATE idx 
+                    ON HASH 
+                    PREFIX 1 blog:post: 
+                SCHEMA 
+                    title TEXT WEIGHT 5.0
+                    content TEXT
+                    author TAG
+                    created_date NUMERIC SORTABLE
+                    views NUMERIC
+
+FT.CREATE idx_places ON HASH PREFIX 1 place: SCHEMA name TEXT  tags tag location GEO SORTABLE stars numeric SORTABLE                 
+FT.INFO  <INDEX>
 ```
+![alt text](image.png)
+![alt text](image-1.png)
+![alt text](image-2.png)
+https://redis.io/docs/interact/search-and-query/basic-constructs/field-and-type-options/
+![alt text](image-3.png)
+![alt text](image-4.png)
+![alt text](image-5.png) --> SORTEDSET and location and set and geo spatials
+elasticsearch has polygon as well
 
 ```bash
+FT.SEARCH cities "@coords:[2.34 48.86 1000 km]"
+FT.SEARCH books-idx "@title:dogs"
+FT.EXPLAIN 
 ```
-
+## pipeline and lua
+when we have diff services and RTT is important
+start a tcp request,handshake, idle port binding --> bulk request to redis
 ```bash
+MGET
+MSET
+HMSET
+HMGET
 ```
+pipeline improve RTT and better performance on socket I/O and syscall for read and write
+![alt text](image-6.png)
+![alt text](image-7.png)
+for 1000 request --> ![alt text](image-8.png)
 
-```bash
-```
-
-```bash
-```
-
-```bash
-```
-
+lua script benefit is atomic and at redis at one server
+![alt text](image-9.png)
+when needs transaction and logic and need response --> rate limit
+[]rate-limit
 ```bash
 ```
